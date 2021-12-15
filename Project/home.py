@@ -17,6 +17,9 @@ import numpy as np
 
 from flask.helpers import url_for
 
+import swap_face
+import tiktok
+
 ##################################  remove background bằng devlabv3  #####################################
 def load_model():
     model = torch.hub.load('pytorch/vision:v0.6.0', 'deeplabv3_resnet101', pretrained=True)
@@ -189,21 +192,25 @@ def inner_page():
             #final_image = remove_background3(path_to_save)
         except:
             return render_template("inner-page.html", img_background = path_background)
-        btn_submit = request.form["btn_RM"]
-        if (btn_submit == "RM1"):
-            foreground= remove_background(deeplab_model, path_to_save)  ### lấy path image
-            final_image = custom_background( path_background , foreground)    ## lấy ảnh của background
-            final_image.save(path_to_save)  
-        else:
-            print("có qua đây")
-            final_image= tack(path_to_save, path_background)
-            cv2.imwrite(path_to_save, final_image)
+        try:
+            btn_submit = request.form["btn_RM"]
+            if (btn_submit == "RM1"):
+                foreground= remove_background(deeplab_model, path_to_save)  ### lấy path image
+                final_image = custom_background( path_background , foreground)    ## lấy ảnh của background
+                final_image.save(path_to_save)  
+            else:
+                print("có qua đây")
+                final_image= tack(path_to_save, path_background)
+                cv2.imwrite(path_to_save, final_image)
+            return  render_template("inner-page.html", msg =path_to_save, user_image = path_to_save, img_background = path_background)
+        except:
+            ind =ind
 
         #save img_destination
 
         
         #img = remove_background(path_to_save)             
-        return  render_template("inner-page.html", msg =path_to_save, user_image = path_to_save, img_background = path_background)
+        return  render_template("inner-page.html", msg =path_to_save,  img_background = path_background)
     
 
 
@@ -324,12 +331,230 @@ def video():
             camera = cv2.VideoCapture(0)
         return Response(generate_frame(path_background),mimetype='multipart/x-mixed-replace; boundary=frame') 
 
+################################################################################################
+####### SERVICE 3
+
+predictor = dlib.shape_predictor("./__pycache__/shape_predictor_68_face_landmarks.dat")    
+
+def generate_frame2(path_bg, predictor):        
+    global flag
+    global capture
+    global path_save
+    img_bg = cv2.imread(path_bg, 1)
+    while flag == True:
+        success, frame = camera.read()
+        if not success:
+            break
+        else:
+            
+            ## có frame 
+            try:
+                frame = swap_face.swap_face(img_bg,frame, predictor)
+            except:
+                frame = frame
+            # print("FRame")
+            
+            if capture == True:  
+                print("có capture")
+                now = datetime.now()
+                current_time = now.strftime("%H_%M_%S")
+
+                path_save = "static/assets/save_image/img_faceswap_" + current_time +".jpg"
+                cv2.imwrite(path_save, frame)
+                camera.release()
+                flag = False
+                capture = False
+                
+
+
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame = buffer.tobytes()
+        
+        yield (b'--frame\r\n' 
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        
+ind2 =0
+@app.route('/inner-page-3', methods = ["POST", "GET"])
+def index2():
+    global flag
+    global capture
+    global camera
+    global ind2 
+    global path_faceswap
+    path_faceswap = "/static/assets/back_ground/Bradley.jpg"    
+    if request.method == "GET":
+        return render_template("inner-page-3.html", img_background = path_faceswap)
+    else:
+        try:
+            next = request.form["next"]
+            if (next == "❯" ):
+                ind2 +=1
+            elif (next =="❮"):
+                ind2 -=1
+        except:
+            ind2 = ind2
+        if (ind2%2) == 0:
+            path_faceswap = "static/Bradley.jpg"
+        elif ind2%2==1:
+            path_faceswap = "static/441px-Jim_Carrey_2008.jpg"
+        # elif ind2%2==2:
+        #     path_faceswap = "static/img_bg_2.jpg"
+        # elif ind2%2==3:
+        #     path_faceswap = "static/img_bg_3.jpg"
+        # else:
+        #     path_faceswap = "static/img_bg_4.jpg"
+        
+        print(path_faceswap)
+        print(ind2)
+        
+        faceswap = request.files["file2"]
+        if (faceswap.filename != ""):
+                path_faceswap = os.path.join(app.config['UPLOAD_FOLDER'], faceswap.filename)
+                faceswap.save(path_faceswap)
+        try:        
+            btn = request.form["button"]
+            if btn == "STOP":
+                print("STOP")
+                flag = False
+                camera.release()
+                return render_template("inner-page-3.html", img_background= path_faceswap)
+            if btn == "START":
+                print("START")
+                flag = True
+                camera = cv2.VideoCapture(0)
+                return render_template("inner-page-3.html", url_img = url_for('video2'))
+            if btn =="CAPTURE":
+                capture = True            
+                if capture == True  :
+                    time.sleep(1)
+                    print("first")
+                    return render_template("inner-page-3.html", url_img = path_save, img_background= path_faceswap)
+        except:
+            return render_template("inner-page-3.html", img_background = path_faceswap)
+        return render_template("inner-page-3.html", img_background = path_faceswap)
+            
+            
+
+@app.route('/inner-page-3/video2', methods = ["POST", "GET"])
+def video2():
+    global camera 
+    camera = cv2.VideoCapture(0)
+    if request.method == "GET":
+        if flag== False:
+            camera.release()
+        else:
+            camera = cv2.VideoCapture(0)
+        return Response(generate_frame2(path_faceswap, predictor),mimetype='multipart/x-mixed-replace; boundary=frame') 
+
+
+################################################################################################
+ #################  SERVICE 4 ##################################################################
     
+predictor = dlib.shape_predictor("./__pycache__/shape_predictor_68_face_landmarks.dat")
+def generate_frame3(path_nose, predictor):        
+    global flag
+    global capture
+    global path_save
+    nose_image = cv2.imread(path_nose, 1)
+    while flag == True:
+        success, frame = camera.read()
+        if not success:
+            break
+        else:
+            
+            ## có frame 
+        
+            # print("FRame")
+            frame = tiktok.attach_nose(frame, nose_image, predictor)
+            
+            if capture == True:  
+                print("có capture")
+                now = datetime.now()
+                current_time = now.strftime("%H_%M_%S")
+
+                path_save = "static/assets/save_image/img_nose_" + current_time +".jpg"
+                cv2.imwrite(path_save, frame)
+                camera.release()
+                flag = False
+                capture = False
+                
 
 
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame = buffer.tobytes()
+        
+        yield (b'--frame\r\n' 
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        
+ind3 =0
+@app.route('/inner-page-4', methods = ["POST", "GET"])
+def index3():
+    global flag
+    global capture
+    global camera
+    global ind3 
+    global path_nose
+    path_nose = "/static/pig_nose.png"    
+    if request.method == "GET":
+        return render_template("inner-page-4.html", img_background = path_nose)
+    else:
+        try:
+            next = request.form["next"]
+            if (next == "❯" ):
+                ind3 +=1
+            elif (next =="❮"):
+                ind3 -=1
+        except:
+            ind3 = ind3
+        if (ind3%2) == 0:
+            path_nose = "static/pig_nose.png"
+        elif ind3%2==1:
+            path_nose = "static/pig_nose.png"
+        # elif ind2%2==2:
+        #     path_faceswap = "static/img_bg_2.jpg"
+        # elif ind2%2==3:
+        #     path_faceswap = "static/img_bg_3.jpg"
+        # else:
+        #     path_faceswap = "static/img_bg_4.jpg"
+        
+        Nose = request.files["file2"]
+        if (Nose.filename != ""):
+                path_nose = os.path.join(app.config['UPLOAD_FOLDER'], Nose.filename)
+                Nose.save(path_nose)
+        try:        
+            btn = request.form["button"]
+            if btn == "STOP":
+                print("STOP")
+                flag = False
+                camera.release()
+                return render_template("inner-page-4.html", img_background= path_nose)
+            if btn == "START":
+                print("START")
+                flag = True
+                camera = cv2.VideoCapture(0)
+                return render_template("inner-page-4.html", url_img = url_for('video3'))
+            if btn =="CAPTURE":
+                capture = True            
+                if capture == True  :
+                    time.sleep(1)
+                    print("first")
+                    return render_template("inner-page-4.html", url_img = path_save, img_background= path_nose)
+        except:
+            return render_template("inner-page-4.html", img_background = path_nose)
+        return render_template("inner-page-4.html", img_background = path_nose)
+            
+            
 
-
-
+@app.route('/inner-page-4/video3', methods = ["POST", "GET"])
+def video3():
+    global camera 
+    camera = cv2.VideoCapture(0)
+    if request.method == "GET":
+        if flag== False:
+            camera.release()
+        else:
+            camera = cv2.VideoCapture(0)
+        return Response(generate_frame3(path_nose, predictor),mimetype='multipart/x-mixed-replace; boundary=frame') 
 
 ## start server 
 if __name__ == '__main__':
